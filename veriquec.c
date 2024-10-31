@@ -3603,6 +3603,9 @@ static int veriquec_enable(struct ofono_modem *modem)
 	g_at_chat_send(data->mdm, "AT+QNVW=3532,0,\"05\"", none_prefix, NULL, NULL, NULL); // retry_period = 5 second
 	g_at_chat_send(data->mdm, "AT+QNVW=3533,0,\"00\"", none_prefix, NULL, NULL, NULL); // retry_interval = 0 second
 
+	//Enable RmNet device status URC
+	g_at_chat_send(data->mdm, "AT+QNETDEVSTATUS=1", none_prefix, NULL, NULL, NULL); 
+
 	g_at_chat_send(data->app, "AT+CFUN=4", none_prefix,
 						cfun_enable, modem, NULL);
 

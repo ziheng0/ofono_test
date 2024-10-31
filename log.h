@@ -67,6 +67,18 @@ struct ofono_debug_desc {
 					__FILE__, __FUNCTION__ , ## arg); \
 } while (0)
 
+#define ql_ofono_verison "20241031"
+
+#define quectel_debug(fmt, arg...) do { \
+	static struct ofono_debug_desc __ofono_debug_desc \
+	__attribute__((used, section("__debug"), aligned(8))) = { \
+		.file = __FILE__, .flags = OFONO_DEBUG_FLAG_DEFAULT, \
+	}; \
+	if (__ofono_debug_desc.flags & OFONO_DEBUG_FLAG_PRINT) \
+		ofono_debug("%s:%s() [quectel_debug_version:%s] " fmt, \
+					__FILE__, __FUNCTION__ , ql_ofono_verison, ## arg);\
+} while (0)
+
 #ifdef __cplusplus
 }
 #endif

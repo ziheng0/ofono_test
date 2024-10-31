@@ -291,7 +291,7 @@ static void* ql_thread1_function(void *data) {
 						g_at_chat_send(gd->chat, "AT+QNETDEVSTATUS? ", NULL, ql_read_wwan_ip, gprs, NULL);	// check wwan0 ip
 						quectel_debug("[puck] case-1 modem_ip:%s,wwan_ip:%s",ql_data.modem_ip, ql_data.wwan_ip);
 					}
-					break;
+					//break;
 				}
 			}// end case-1
 			

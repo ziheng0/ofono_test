@@ -766,6 +766,14 @@ static void cgev_notify(GAtResult *result, gpointer user_data)
 			g_str_equal(event, "ME DETACH")) {
 		gd->attached = FALSE;
 		ofono_gprs_detached_notify(gprs);
+		//add by puck 2024-11-05
+		quectel_debug("[cgev_notify] ql_data.rmnet_state: %d; ql_data.rmnet_check:%d",ql_data.rmnet_state, ql_data.rmnet_check);
+		if(ql_data.rmnet_check == 1) {
+			quectel_debug("[cgev_notify] before ql_data.rmnet_state: %d; ql_data.rmnet_check:%d",ql_data.rmnet_state, ql_data.rmnet_check);
+		    g_at_chat_send(gd->chat, "AT$QCRMCALL=0,1", NULL, ql_qcrmacall, gprs, NULL);
+			quectel_debug("[cgev_notify] after ql_data.rmnet_state: %d; ql_data.rmnet_check:%d",ql_data.rmnet_state, ql_data.rmnet_check);
+		}
+		//end by puck
 		return;
 	} else if (g_str_has_prefix(event, "PDN ACT")) {
 		// Quectels format doesn't have a space before the CID, so

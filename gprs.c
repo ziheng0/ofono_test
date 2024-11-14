@@ -49,11 +49,14 @@ static const char *cgdcont_prefix[] = { "+CGDCONT:", NULL };
 static const char *none_prefix[] = { NULL };
 
 //add by puck
+#include <unistd.h>
 #include <pthread.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
+
+#define INET_ADDRSTRLEN 16
 
 typedef struct
 {
@@ -94,8 +97,8 @@ static int ql_compare_ips(const char* ip_address1, const char* ip_address2);
 static int ql_set_ip_address(const char* interface_name, const char* ip_address);
 static void ql_get_ip_address(const char* interface_name, char* ip_address);
 static void ql_fix();
-static void ql_parse_qnetdevstatus_check(const char *raw_data, int *status);
-static void ql_parse_modem_info(char *raw_data, char *modem_ip);
+static void ql_parse_qnetdevstatus_check(const char *raw_data, int status);
+static void ql_parse_modem_info(const char *raw_data, char *modem_ip);
 static void ql_read_modem_ip(gboolean ok, GAtResult *result,
 				gpointer user_data);
 static void ql_read_wwan_ip(gboolean ok, GAtResult *result,
@@ -249,189 +252,129 @@ static void* ql_thread1_function(void *data) {
 		
 		ret = check_wwan_modem_ip();
 		//g_at_chat_send(gd->chat, "AT$QCRMCALL? ", NULL, NULL, gprs, NULL); // test need to delete.
-		quectel_debug("[puck] ql_data.pdp_act: %d;ql_data.rmnet_state: %d ;ret: %d",ql_data.pdp_act, ql_data.rmnet_state,ret);
+		quectel_debug("[while-1] ql_data.pdp_act: %d;ql_data.rmnet_state: %d ;ret: %d",ql_data.pdp_act, ql_data.rmnet_state,ret);
 		//if((ql_data.pdp_act == true) && (ql_data.rmnet_state == 0) && (ret == 1))
 		// loop - 1 to handle the case 1,2,3
 		if(ql_data.rmnet_state == 0){ // loop - 1
     		if((ql_data.pdp_act == true) && (ret == 1)){ // case-1
 				ql_data.retry_count = 5;
-		    	quectel_debug("[puck] maybe we found the issue and ql_data.rmnet_check is %d...", ql_data.rmnet_check);
+		    	quectel_debug("[loop-1] maybe we found the issue and ql_data.rmnet_check is %d...", ql_data.rmnet_check);
 				while( ql_data.retry_count > 0){
 					sleep(2);
 					g_at_chat_send(gd->chat, "AT+CGCONTRDP ", NULL, ql_read_modem_ip, gprs, NULL); // check modem ip
 					g_at_chat_send(gd->chat, "AT+QNETDEVSTATUS? ", NULL, ql_read_wwan_ip, gprs, NULL);	// check wwan0 ip
 					sleep(1);
 					ret = check_wwan_modem_ip();
-					quectel_debug("[puck] ql_data.pdp_act: %d;ql_data.rmnet_state: %d ;ret: %d",ql_data.pdp_act, ql_data.rmnet_state,ret);
+					quectel_debug("[loop-1] ql_data.pdp_act: %d;ql_data.rmnet_state: %d ;ret: %d",ql_data.pdp_act, ql_data.rmnet_state,ret);
 	
 					if((ql_data.pdp_act == true) && (ql_data.rmnet_state == 0) &&(ret == 1)){ // case 1 and case 3
 						if( ql_data.rmnet_check==1){
-							quectel_debug("[puck] case-3");	
+							quectel_debug("[loop-1] case-3");	
 							ql_data.retry_count--;
 						}
 						if(ql_data.rmnet_check==0){
-							quectel_debug("[puck] case-1");	
+							quectel_debug("[loop-1] case-1");	
 							ql_data.retry_count--;
 						}
-						quectel_debug("[puck] retry_count %d",ql_data.retry_count);
+						quectel_debug("[loop-1] retry_count %d",ql_data.retry_count);
 					}
 					else{
-						quectel_debug("[puck] maybe fixed by ofono and gsmsrv...");
+						quectel_debug("[loop-1] maybe fixed by ofono and gsmsrv...");
 						break;
 					}
 				}
 				if(ql_data.retry_count == 0){
-					quectel_debug("[puck] case-1 retry_count: %d; need to fix",ql_data.retry_count);
+					quectel_debug("[loop-1] case-1 retry_count: %d; need to fix",ql_data.retry_count);
 					g_at_chat_send(gd->chat, "AT$QCRMCALL=1,1", NULL, ql_qcrmacall, gprs, NULL);
 					sleep(3);
 					if(check_wwan_modem_ip){
-						quectel_debug("[puck] udhcpc -i wwan0");
-						system("udhcpc -i wwan0");
+						quectel_debug("[loop-1] udhcpc -i wwan0");
+						if(system("udhcpc -i wwan0") != 0){
+							quectel_debug("[loop-1] udhcpc -i wwan0 failed");
+						}
 						sleep(3);
 						g_at_chat_send(gd->chat, "AT+CGCONTRDP ", NULL, ql_read_modem_ip, gprs, NULL); // check modem ip
 						g_at_chat_send(gd->chat, "AT+QNETDEVSTATUS? ", NULL, ql_read_wwan_ip, gprs, NULL);	// check wwan0 ip
-						quectel_debug("[puck] case-1 modem_ip:%s,wwan_ip:%s",ql_data.modem_ip, ql_data.wwan_ip);
+						quectel_debug("[loop-1] case-1 modem_ip:%s,wwan_ip:%s",ql_data.modem_ip, ql_data.wwan_ip);
 					}
-					//break;
 				}
 			}// end case-1
 			
 			else if(ql_data.pdp_act == false){
 				if(ql_data.rmnet_check == 1){  // case-2
-					quectel_debug("[puck] case-2");	
+					quectel_debug("[loop-1] case-2");	
 					g_at_chat_send(gd->chat, "AT+QNETDEVSTATUS? ", NULL, ql_read_wwan_ip, gprs, NULL);
 					g_at_chat_send(gd->chat, "AT$QCRMCALL? ", NULL, NULL, gprs, NULL);
-					quectel_debug("[puck] before ql_data.rmnet_state: %d",ql_data.rmnet_state);
+					quectel_debug("[loop-1] before ql_data.rmnet_state: %d",ql_data.rmnet_state);
 
 					g_at_chat_send(gd->chat, "AT$QCRMCALL=0,1", NULL, ql_qcrmacall, gprs, NULL);
 
 					g_at_chat_send(gd->chat, "AT+QNETDEVSTATUS? ", NULL, ql_read_wwan_ip, gprs, NULL);
 					g_at_chat_send(gd->chat, "AT$QCRMCALL? ", NULL, NULL, gprs, NULL);
-					quectel_debug("[puck] after ql_data.rmnet_state: %d",ql_data.rmnet_state);
+					quectel_debug("[loop-1] after ql_data.rmnet_state: %d",ql_data.rmnet_state);
 					ql_data.rmnet_check = 0;
 				}
 				else{
-					quectel_debug("[puck] no case 1 2 4....");	
-					//break;
+					quectel_debug("[loop-1] no case 1 2 4....");	
 				}
-				//break;
 			}//end case-2
 		}
 
 		// loop - 2 to handle case4
 		else if(((ql_data.pdp_act == true) && (ql_data.rmnet_state == 2)&& (ret == 1)) || ((ql_data.pdp_act == true) && (ql_data.rmnet_state == 1)&& (ret == 1))) {
 			ql_data.retry_count = 5;
-			quectel_debug("[puck] loop-2,case-4 ql_data.pdp_act: %d;ql_data.rmnet_state: %d ;ret: %d,",ql_data.pdp_act, ql_data.rmnet_state,ret);
+			quectel_debug("[loop-2] ql_data.pdp_act: %d;ql_data.rmnet_state: %d ;ret: %d,",ql_data.pdp_act, ql_data.rmnet_state,ret);
 			while(ql_data.retry_count > 0){
 				sleep(2);
 				g_at_chat_send(gd->chat, "AT+CGCONTRDP ", NULL, ql_read_modem_ip, gprs, NULL); // check modem ip
 				g_at_chat_send(gd->chat, "AT+QNETDEVSTATUS? ", NULL, ql_read_wwan_ip, gprs, NULL);	// check wwan0 ip
 				sleep(1);
 				ret = check_wwan_modem_ip();
-				quectel_debug("[puck] ql_data.pdp_act: %d;ql_data.rmnet_state: %d ;ret: %d",ql_data.pdp_act, ql_data.rmnet_state,ret);
-				quectel_debug("[puck] case-4  retry_count: %d;ql_data.rmnet_check: %d ", ql_data.retry_count ,ql_data.rmnet_check);
+				quectel_debug("[loop-2] ql_data.pdp_act: %d;ql_data.rmnet_state: %d ;ret: %d",ql_data.pdp_act, ql_data.rmnet_state,ret);
+				quectel_debug("[loop-2] case-4  retry_count: %d;ql_data.rmnet_check: %d ", ql_data.retry_count ,ql_data.rmnet_check);
 				
-				if((ql_data.pdp_act == true) && (ql_data.rmnet_state == 1) &&(ret == 1)){ // case 1 and case 3
-					quectel_debug("[puck] we have the case-4 need to fix");
+				if(((ql_data.pdp_act == true) && (ql_data.rmnet_state == 2) &&(ret == 1)) || ((ql_data.pdp_act == true) && (ql_data.rmnet_state == 1)&& (ret == 1)))
+				{
+					quectel_debug("[loop-2] we have the case-4 need to fix");
 					ql_data.retry_count--;
 				}
 				else{
-					quectel_debug("[puck] maybe case-4 fixed by ofono and gsmsrv...");
+					quectel_debug("[loop-2] maybe case-4 fixed by ofono and gsmsrv...");
 					break;
 				}
-				quectel_debug("[puck] retry_count %d",ql_data.retry_count);
+				quectel_debug("[loop-2] retry_count %d",ql_data.retry_count);
 			}
 			if(ql_data.retry_count == 0){
-				quectel_debug("[puck] case-4 retry_count: %d; need to fix",ql_data.retry_count);
+				quectel_debug("[loop-2] case-4 retry_count: %d; need to fix",ql_data.retry_count);
 				if(check_wwan_modem_ip){
-					quectel_debug("[puck] udhcpc -i wwan0");
-					system("udhcpc -i wwan0");
+					quectel_debug("[loop-2] udhcpc -i wwan0");
+					if(system("udhcpc -i wwan0") != 0){
+						quectel_debug("[loop-2] udhcpc -i wwan0 failed");
+					}
 					sleep(3);
 					g_at_chat_send(gd->chat, "AT+CGCONTRDP ", NULL, ql_read_modem_ip, gprs, NULL); // check modem ip
 					g_at_chat_send(gd->chat, "AT+QNETDEVSTATUS? ", NULL, ql_read_wwan_ip, gprs, NULL);
 					check_wwan_modem_ip(); // update the wwan_ip
-					quectel_debug("[puck] case-4 modem_ip:%s,wwan_ip:%s",ql_data.modem_ip, ql_data.wwan_ip);
+					quectel_debug("[loop-2] case-4 modem_ip:%s,wwan_ip:%s",ql_data.modem_ip, ql_data.wwan_ip);
 				}
 			}
 		}
 		else{
-			quectel_debug("[puck] Did not enter loop1 and loop2...");
+			quectel_debug("[loop-3] Did not enter loop1 and loop2...");
+			if(check_wwan_modem_ip()){
+				quectel_debug("[loop-3] udhcpc -i wwan0");
+				if(system("udhcpc -i wwan0") != 0){
+					quectel_debug("[loop-3] udhcpc -i wwan0 failed");
+				}
+			}
 		}
-		sleep(20);
+		sleep(60);
 	}
 }
 
 
 bool hasData(const char *str) {
     return str != NULL && str[0] != '\0';
-}
-
-char* read_wwan_operstate(const char* filename) {
-    FILE* file = fopen(filename, "r");
-    if (!file) {
-        perror("Error opening file");
-        exit(EXIT_FAILURE);
-    }
-
-    char* buffer = (char*)malloc(10 * sizeof(char));
-    if (!buffer) {
-        perror("Memory allocation failed");
-        exit(EXIT_FAILURE);
-    }
-
-    fgets(buffer, 10, file);
-
-    fclose(file);
-
-    return buffer;
-}
-
-void rmnet_fix()
-{
-	struct ofono_gprs_context *gc;
-	struct gprs_data *gd;
-	quectel_debug("rmnet_state :%d",ql_data.rmnet_state);
-	
-	//check wwan0(0,1,2) 
-	if(ql_data.rmnet_state){
-		if(ql_data.rmnet_state==2){
-			quectel_debug("rmnet works fine do nothing...modem_ip:%s,wwan_ip:%s",ql_data.modem_ip, ql_data.wwan_ip);
-			check_wwan_modem_ip();
-		}
-		if(ql_data.rmnet_state == 1){
-			quectel_debug("rmnet ready...need udhcpc -i wwan0");
-			check_wwan_modem_ip();
-			//system("udhcpc -i wwan0");
-		}
-	}
-	else{ // rmnet_state = 0
-		quectel_debug("rmnet need to fix");
-		// check modem ip
-		if(hasData(ql_data.modem_ip)){ // modem ip good
-			quectel_debug("hasData modem_ip :%s and need to AT$QCRMCALL=1,1",ql_data.modem_ip);
-			g_at_chat_send(gd->chat, "AT$QCRMCALL=1,1", none_prefix, NULL, NULL, NULL);
-			//check wwan0 ip and modem ip, 0--same
-			check_wwan_modem_ip();
-			// if(strcmp(ql_data.wwan_ip, ql_data.modem_ip)){
-			// 	//g_at_chat_send(gd->chat, "AT$QCRMCALL=1,1", none_prefix, NULL, NULL, NULL);
-			// 	quectel_debug("wwan_ip modem_ip not same need udhcpc -i wwan0");
-			// 	//system("udhcpc -i wwan0");
-			// }
-		}
-		else{
-			// no modem_ip and wwan_ip, so let ofono to fix first
-			if(ql_data.no_ip_count == 1){
-				quectel_debug("Warning: No modem_ip and wwan_ip for the second time! and reset no_ip_count %d",ql_data.no_ip_count);
-				ql_data.no_ip_count=0;
-				quectel_debug("Warning: No modem_ip and wwan_ip for the second time! and reset no_ip_count %d",ql_data.no_ip_count);
-			}
-			else{
-				(ql_data.no_ip_count)++;
-				quectel_debug("try to wait 20s, no_ip_count %d",ql_data.no_ip_count);
-				usleep(20000000);
-			}
-		}
-	}
 }
 
 static int ql_compare_ips(const char* ip_address1, const char* ip_address2) {
@@ -484,7 +427,7 @@ static int check_wwan_modem_ip(){
 	}
 }
 
-static void ql_parse_modem_info(char *raw_data, char *modem_ip) {
+static void ql_parse_modem_info(const char *raw_data, char *modem_ip) {
     if (raw_data == NULL) {
 		memset(ql_data.modem_ip, 0, sizeof(ql_data.modem_ip));
 		ql_data.pdp_act = false;
@@ -514,7 +457,7 @@ static void ql_parse_modem_info(char *raw_data, char *modem_ip) {
     }
 }
 
-static void ql_parse_qnetdevstatus_check(const char *raw_data, int *status) {
+static void ql_parse_qnetdevstatus_check(const char *raw_data, int status) {
 	
     if (raw_data == NULL) {
         quectel_debug("parse_qnetdevstatus: raw data is NULL\n");
@@ -574,7 +517,7 @@ static void ql_qcrmacall(gboolean ok, GAtResult *result,
 	for (int i = 0; i < g_at_result_num_response_lines(result); i++)
 		g_at_result_iter_next(&iter, NULL);
 		raw_data = g_at_result_iter_raw_line(&iter);
-	quectel_debug("[puck] ql_qcrmacall: %s", raw_data);
+	quectel_debug("ql_qcrmacall: %s", raw_data);
 }
 
 static void ql_read_modem_ip(gboolean ok, GAtResult *result,
@@ -808,24 +751,24 @@ static void qnetdevstatus_notify(GAtResult *result, gpointer user_data)
 		return;
 	
 	if (stat==0){
-		quectel_debug("[puck] stat: %d, Enable RmNet device status URC", stat);
+		quectel_debug("stat: %d, Enable RmNet device status URC", stat);
 	}
 	else if (stat==1){
-	    quectel_debug("[puck] stat: %d, A RmNet call is ready and MCU can get IP addresses by DHCP or QMI", stat);
+	    quectel_debug("stat: %d, A RmNet call is ready and MCU can get IP addresses by DHCP or QMI", stat);
 	}
 	else if (stat==2)
 	{
-		quectel_debug("[puck] stat: %d, A rmnet call is connected", stat);
+		quectel_debug("stat: %d, A rmnet call is connected", stat);
 
 		if (!ql_data.thread1_created) {
 			pthread_t tid1;
 			if(pthread_create(&tid1, NULL, ql_thread1_function, gprs)){
-				quectel_debug("[puck] ql_thread1 failed");
+				quectel_debug("ql_thread1 failed");
 				ql_data.thread1_created = false;
 				return;
 			}
 			ql_data.thread1_created = true;
-			quectel_debug("[puck] ql_data.thread1_created :%d", ql_data.thread1_created);
+			quectel_debug("ql_data.thread1_created :%d", ql_data.thread1_created);
     	}
 	}
 }

@@ -296,6 +296,7 @@ static void* ql_thread1_function(void *data) {
 					if(ql_data.retry_count == 0){
 						quectel_debug("[loop-1] case-1 retry_count: %d; need to fix",ql_data.retry_count);
 						g_at_chat_send(gd->chat, "AT$QCRMCALL=1,1", NULL, ql_qcrmacall, gprs, NULL);
+						ql_data.rmnet_check = 1;
 						sleep(3);
 						if(check_wwan_modem_ip){
 							quectel_debug("[loop-1] udhcpc -i wwan0");

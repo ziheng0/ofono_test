@@ -67,7 +67,7 @@ struct ofono_debug_desc {
 					__FILE__, __FUNCTION__ , ## arg); \
 } while (0)
 
-#define ql_ofono_verison "20241122_1"
+#define ql_ofono_verison "20241124"
 
 #define quectel_debug(fmt, arg...) do { \
 	static struct ofono_debug_desc __ofono_debug_desc \

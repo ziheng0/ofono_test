@@ -333,7 +333,7 @@ static void* ql_thread1_function(void *data) {
 		}
 
 		// loop - 2 to handle case4
-		else if(((ql_data.pdp_act == true) && (ql_data.rmnet_state == 2)&& (ret == 1)) || ((ql_data.pdp_act == true) && (ql_data.rmnet_state == 1)&& (ret == 1))) {
+		if(((ql_data.pdp_act == true) && (ql_data.rmnet_state == 2)&& (ret == 1)) || ((ql_data.pdp_act == true) && (ql_data.rmnet_state == 1)&& (ret == 1))) {
 			if(ql_data.is_empty == false){ // modem ip is not empty
 				quectel_debug("[loop-2] modem ip is not empty, we use udhcpc -i wwan0 directly...");
 				if(system("udhcpc -i wwan0") != 0){
@@ -380,15 +380,15 @@ static void* ql_thread1_function(void *data) {
 				}
 			} // end is_empty
 		}
-		else{
-			quectel_debug("[loop-3] Did not enter loop1 and loop2...");
-			if(check_wwan_modem_ip()){
-				quectel_debug("[loop-3] udhcpc -i wwan0");
-				if(system("udhcpc -i wwan0") != 0){
-					quectel_debug("[loop-3] udhcpc -i wwan0 failed");
-				}
-			}
-		}
+		// else{
+		// 	quectel_debug("[loop-3] Did not enter loop1 and loop2...");
+		// 	if(check_wwan_modem_ip()){
+		// 		quectel_debug("[loop-3] udhcpc -i wwan0");
+		// 		if(system("udhcpc -i wwan0") != 0){
+		// 			quectel_debug("[loop-3] udhcpc -i wwan0 failed");
+		// 		}
+		// 	}
+		// }
 		sleep(60);
 	}
 }

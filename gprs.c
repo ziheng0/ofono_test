@@ -247,7 +247,7 @@ static void* ql_thread1_function(void *data) {
 	sleep(3); 
     while (1) {
 		(ql_data.thread1_count)++;
-		quectel_debug(" ql_thread1_function count %d and ql_ofono_verison %s",ql_data.thread1_count, ql_ofono_verison);
+		quectel_debug(" ql_thread1_function count %d and ql_ofono_version %s",ql_data.thread1_count, ql_ofono_version);
 		g_at_chat_send(gd->chat, "AT+CGCONTRDP ", NULL, ql_read_modem_ip, gprs, NULL); // check modem ip
 		g_at_chat_send(gd->chat, "AT+QNETDEVSTATUS? ", NULL, ql_read_wwan_ip, gprs, NULL);	// check wwan0 ip
 		sleep(1);

@@ -258,14 +258,8 @@ static void* ql_thread1_function(void *data) {
 		//if((ql_data.pdp_act == true) && (ql_data.rmnet_state == 0) && (ret == 1))
 		// loop - 1 to handle the case 1,2,3
 		if(ql_data.rmnet_state == 0){ // loop - 1
-    		if((ql_data.pdp_act == true) && (ret == 1)){ // case-1
-				if(ql_data.is_empty == false){ // modem ip is not empty
-					quectel_debug("[loop-1] modem ip is not empty, we use udhcpc -i wwan0 directly...");
-						if(system("udhcpc -i wwan0") != 0){
-							quectel_debug("[loop-1] udhcpc -i wwan0 failed");
-						}
-				}
-				else{
+    		 if((ql_data.pdp_act == true) && (ret == 1)){ // case-1
+			 	if(ql_data.is_empty == false){ // modem ip is not empty
 					quectel_debug("[loop-1] modem ip is empty and ql_data.is_empty-%d", ql_data.is_empty);
 					ql_data.retry_count = 3;
 					quectel_debug("[loop-1] maybe we found the issue and ql_data.rmnet_check is %d...", ql_data.rmnet_check);
@@ -303,7 +297,7 @@ static void* ql_thread1_function(void *data) {
 							if(system("udhcpc -i wwan0") != 0){
 								quectel_debug("[loop-1] udhcpc -i wwan0 failed");
 							}
-							sleep(3);
+							sleep(1);
 							g_at_chat_send(gd->chat, "AT+CGCONTRDP ", NULL, ql_read_modem_ip, gprs, NULL); // check modem ip
 							g_at_chat_send(gd->chat, "AT+QNETDEVSTATUS? ", NULL, ql_read_wwan_ip, gprs, NULL);	// check wwan0 ip
 							quectel_debug("[loop-1] case-1 modem_ip:%s,wwan_ip:%s",ql_data.modem_ip, ql_data.wwan_ip);

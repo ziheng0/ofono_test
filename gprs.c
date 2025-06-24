@@ -48,7 +48,9 @@ static const char *cgreg_prefix[] = { "+CGREG:", NULL };
 static const char *cgdcont_prefix[] = { "+CGDCONT:", NULL };
 static const char *none_prefix[] = { NULL };
 
-//add by puck
+static void at_cgdcont_read_cb(gboolean ok, GAtResult *result,
+				gpointer user_data);
+
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/socket.h>
@@ -60,8 +62,7 @@ static const char *none_prefix[] = { NULL };
 
 typedef struct
 {
-    uint32_t thread1_count;
-    //uint32_t thread2_count;
+    uint32_t thread_count;
 	int rmnet_check;
 	int retry_count;
     bool found_issue;
@@ -70,15 +71,13 @@ typedef struct
     int rmnet_state;
     const char *ifname;
     int no_ip_count;
-    bool thread1_created;
-    bool thread2_created;
+    bool thread_created;
 	bool pdp_act;
 	bool is_empty;
 }ql_struct_s;
 
 ql_struct_s ql_data = {
-    .thread1_count = 0,
-    //.thread2_count = 0,
+    .thread_count = 0,
 	.rmnet_check = 0,
 	.retry_count =5,
     .found_issue = false,
@@ -87,8 +86,7 @@ ql_struct_s ql_data = {
     .rmnet_state = -1,
     .ifname = "wwan0",
     .no_ip_count = 0,
-    .thread1_created = false,
-    .thread2_created = false,
+    .thread_created = false,
 	.pdp_act = false,
 	.is_empty = false,
 };
@@ -105,7 +103,7 @@ static void ql_read_modem_ip(gboolean ok, GAtResult *result,
 				gpointer user_data);
 static void ql_read_wwan_ip(gboolean ok, GAtResult *result,
 				gpointer user_data);
-static void *ql_thread1_function(void *data);
+static void *ql_thread_function(void *data);
 static int check_wwan_modem_ip();
 static void ql_qcrmacall(gboolean ok, GAtResult *result,
 				gpointer user_data);
@@ -235,19 +233,19 @@ static void at_gprs_registration_status(struct ofono_gprs *gprs,
 }
 
 /*
-ql_thread1_function, add new logic, 2024-10-17
+ql_thread_function, add new logic, 2024-10-17
 case 2: ql_data.pdp_act == false && (ql_data.rmnet_state == 0) && (ql_data.rmnet_check == 1
 case 3 : ql_data.pdp_act == ture && (ql_data.rmnet_state == 0) && (ql_data.rmnet_check == 0
 case 4: ql_data.pdp_act == ture && (ql_data.rmnet_state == 1) && (ret == 1)
 */
-static void* ql_thread1_function(void *data) {
+static void* ql_thread_function(void *data) {
 	struct ofono_gprs *gprs = data;
     struct gprs_data *gd = ofono_gprs_get_data(gprs);
 	int ret;
 	sleep(3); 
     while (1) {
-		(ql_data.thread1_count)++;
-		quectel_debug(" ql_thread1_function count %d and ql_ofono_version %s",ql_data.thread1_count, ql_ofono_version);
+		(ql_data.thread_count)++;
+		quectel_debug(" ql_thread_function count %d and ql_ofono_version %s",ql_data.thread_count, ql_ofono_version);
 		g_at_chat_send(gd->chat, "AT+CGCONTRDP ", NULL, ql_read_modem_ip, gprs, NULL); // check modem ip
 		g_at_chat_send(gd->chat, "AT+QNETDEVSTATUS? ", NULL, ql_read_wwan_ip, gprs, NULL);	// check wwan0 ip
 		sleep(1);
@@ -330,9 +328,11 @@ static void* ql_thread1_function(void *data) {
 		if(((ql_data.pdp_act == true) && (ql_data.rmnet_state == 2)&& (ret == 1)) || ((ql_data.pdp_act == true) && (ql_data.rmnet_state == 1)&& (ret == 1))) {
 			if(ql_data.is_empty == false){ // modem ip is not empty
 				quectel_debug("[loop-2] modem ip is not empty, we use udhcpc -i wwan0 directly...");
-				if(system("udhcpc -i wwan0") != 0){
-					quectel_debug("[loop-2] udhcpc -i wwan0 failed");
-				}
+				
+				g_at_chat_send(gd->chat, "AT+CGDCONT?", cgdcont_prefix, at_cgdcont_read_cb, gprs, NULL);
+				// if(system("udhcpc -i wwan0") != 0){
+				// 	quectel_debug("[loop-2] udhcpc -i wwan0 failed");
+				// }
 			}
 			else{
 				quectel_debug("[loop-2] modem ip is empty and ql_data.is_empty-%d", ql_data.is_empty);
@@ -374,16 +374,7 @@ static void* ql_thread1_function(void *data) {
 				}
 			} // end is_empty
 		}
-		// else{
-		// 	quectel_debug("[loop-3] Did not enter loop1 and loop2...");
-		// 	if(check_wwan_modem_ip()){
-		// 		quectel_debug("[loop-3] udhcpc -i wwan0");
-		// 		if(system("udhcpc -i wwan0") != 0){
-		// 			quectel_debug("[loop-3] udhcpc -i wwan0 failed");
-		// 		}
-		// 	}
-		// }
-		sleep(60);
+	sleep(60);
 	}
 }
 
@@ -699,14 +690,14 @@ static void cgev_notify(GAtResult *result, gpointer user_data)
 			g_str_equal(event, "ME DETACH")) {
 		gd->attached = FALSE;
 		ofono_gprs_detached_notify(gprs);
-		//add by puck 2024-11-05
+		
 		quectel_debug("[cgev_notify] ql_data.rmnet_state: %d; ql_data.rmnet_check:%d",ql_data.rmnet_state, ql_data.rmnet_check);
 		if(ql_data.rmnet_check == 1) {
 			quectel_debug("[cgev_notify] before ql_data.rmnet_state: %d; ql_data.rmnet_check:%d",ql_data.rmnet_state, ql_data.rmnet_check);
 		    g_at_chat_send(gd->chat, "AT$QCRMCALL=0,1", NULL, ql_qcrmacall, gprs, NULL);
 			quectel_debug("[cgev_notify] after ql_data.rmnet_state: %d; ql_data.rmnet_check:%d",ql_data.rmnet_state, ql_data.rmnet_check);
 		}
-		//end by puck
+		
 		return;
 	} else if (g_str_has_prefix(event, "PDN ACT")) {
 		// Quectels format doesn't have a space before the CID, so
@@ -716,12 +707,6 @@ static void cgev_notify(GAtResult *result, gpointer user_data)
 
 		g_at_chat_send(gd->chat, "AT+CGDCONT?", cgdcont_prefix,
 				at_cgdcont_read_cb, gprs, NULL);
-
-		// if (!ql_data.thread1_created) {
-		// 	pthread_t tid1;
-		// 	pthread_create(&tid1, NULL, ql_thread1_function, gprs);
-		// 	ql_data.thread1_created = true;
-    	// }
 
 	} else if (g_str_has_prefix(event, "PDN DEACT")) {
 		int context_id = parse_number(event);
@@ -786,15 +771,15 @@ static void qnetdevstatus_notify(GAtResult *result, gpointer user_data)
 	{
 		quectel_debug("stat: %d, A rmnet call is connected", stat);
 
-		if (!ql_data.thread1_created) {
-			pthread_t tid1;
-			if(pthread_create(&tid1, NULL, ql_thread1_function, gprs)){
-				quectel_debug("ql_thread1 failed");
-				ql_data.thread1_created = false;
+		if (!ql_data.thread_created) {
+			pthread_t tid;
+			if(pthread_create(&tid, NULL, ql_thread_function, gprs)){
+				quectel_debug("ql_thread failed");
+				ql_data.thread_created = false;
 				return;
 			}
-			ql_data.thread1_created = true;
-			quectel_debug("ql_data.thread1_created :%d", ql_data.thread1_created);
+			ql_data.thread_created = true;
+			quectel_debug("ql_data.thread_created :%d", ql_data.thread_created);
     	}
 	}
 }
